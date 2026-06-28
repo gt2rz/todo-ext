@@ -1,8 +1,10 @@
 import * as vscode from 'vscode';
-import { TodoTag } from './todo-scanner';
+import { TodoTag, DEFAULT_FILES_GLOB, DEFAULT_EXCLUDE_GLOB } from './todo-scanner';
 
 export interface ResolvedTagConfig {
     tags: TodoTag[];
+    include: string;
+    exclude: string;
 }
 
 const DEFAULT_TAGS: TodoTag[] = [
@@ -42,5 +44,8 @@ export function getTodoFinderConfig(): ResolvedTagConfig {
         byKeyword.set(tag.keyword.toUpperCase(), { ...tag, keyword: tag.keyword.toUpperCase() });
     }
 
-    return { tags: Array.from(byKeyword.values()) };
+    const include = config.get<string>('include', DEFAULT_FILES_GLOB);
+    const exclude = config.get<string>('exclude', DEFAULT_EXCLUDE_GLOB);
+
+    return { tags: Array.from(byKeyword.values()), include, exclude };
 }

@@ -10,6 +10,9 @@
     "Other"
   ],
   "activationEvents": [],
+  "extensionDependencies": [
+    "vscode.git"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
@@ -21,6 +24,48 @@
         "command": "todoFinder.refresh",
         "title": "Refrescar TODOs",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "todoFinder.filter",
+        "title": "Filtrar TODOs",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "todoFinder.clearFilter",
+        "title": "Limpiar filtro de TODOs",
+        "icon": "$(filter-filled)"
+      },
+      {
+        "command": "todoFinder.filterByTag",
+        "title": "Filtrar por esta etiqueta"
+      },
+      {
+        "command": "todoFinder.filterByFolder",
+        "title": "Filtrar por esta carpeta"
+      },
+      {
+        "command": "todoFinder.markIssue",
+        "title": "Marcar como issue"
+      },
+      {
+        "command": "todoFinder.markDone",
+        "title": "Marcar como resuelto"
+      },
+      {
+        "command": "todoFinder.markWontfix",
+        "title": "Marcar como wontfix"
+      },
+      {
+        "command": "todoFinder.markInProgress",
+        "title": "Marcar como en progreso"
+      },
+      {
+        "command": "todoFinder.clearStatus",
+        "title": "Quitar estado"
+      },
+      {
+        "command": "todoFinder.createIssue",
+        "title": "Crear issue en GitHub/GitLab"
       }
     ],
     "menus": {
@@ -29,6 +74,58 @@
           "command": "todoFinder.refresh",
           "when": "view == todoTree",
           "group": "navigation"
+        },
+        {
+          "command": "todoFinder.filter",
+          "when": "view == todoTree && !todoFinder.filterActive",
+          "group": "navigation"
+        },
+        {
+          "command": "todoFinder.clearFilter",
+          "when": "view == todoTree && todoFinder.filterActive",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "todoFinder.filterByTag",
+          "when": "view == todoTree && viewItem == todoFixture",
+          "group": "1_filter"
+        },
+        {
+          "command": "todoFinder.filterByFolder",
+          "when": "view == todoTree && viewItem == todoFile",
+          "group": "1_filter"
+        },
+        {
+          "command": "todoFinder.markIssue",
+          "when": "view == todoTree && viewItem == todoFixture",
+          "group": "2_status"
+        },
+        {
+          "command": "todoFinder.markDone",
+          "when": "view == todoTree && viewItem == todoFixture",
+          "group": "2_status"
+        },
+        {
+          "command": "todoFinder.markWontfix",
+          "when": "view == todoTree && viewItem == todoFixture",
+          "group": "2_status"
+        },
+        {
+          "command": "todoFinder.markInProgress",
+          "when": "view == todoTree && viewItem == todoFixture",
+          "group": "2_status"
+        },
+        {
+          "command": "todoFinder.clearStatus",
+          "when": "view == todoTree && viewItem == todoFixture",
+          "group": "2_status"
+        },
+        {
+          "command": "todoFinder.createIssue",
+          "when": "view == todoTree && viewItem == todoFixture",
+          "group": "3_issue"
         }
       ]
     },
@@ -79,6 +176,16 @@
               }
             }
           }
+        },
+        "todoFinder.include": {
+          "type": "string",
+          "default": "**/*.{ts,js,py,md,txt,php}",
+          "description": "Patrón glob de archivos a escanear en busca de TODOs."
+        },
+        "todoFinder.exclude": {
+          "type": "string",
+          "default": "**/{node_modules,vendor}/**",
+          "description": "Patrón glob de archivos/carpetas a excluir del escaneo."
         }
       }
     }

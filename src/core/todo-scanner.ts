@@ -15,8 +15,14 @@ export interface TodoMatch {
     file: vscode.Uri;
 }
 
-const FILES_GLOB = '**/*.{ts,js,py,md,txt,php}';
-const EXCLUDE_GLOB = '**/{node_modules,vendor}/**';
+export interface MatchFilter {
+    tags?: Set<string>;
+    text?: string;
+    pathPattern?: string;
+}
+
+export const DEFAULT_FILES_GLOB = '**/*.{ts,js,py,md,txt,php}';
+export const DEFAULT_EXCLUDE_GLOB = '**/{node_modules,vendor}/**';
 
 function escapeRegExp(value: string): string {
     return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -31,7 +37,7 @@ export async function scanFile(uri: vscode.Uri, regex: RegExp): Promise<TodoMatc
     const matches: TodoMatch[] = [];
     let content: string;
     try {
-        content = fs.readFileSync(uri.fsPath, 'utf8');
+        content = await fs.promises.readFile(uri.fsPath, 'utf8');
     } catch {
         return matches;
     }
@@ -52,11 +58,43 @@ export async function scanFile(uri: vscode.Uri, regex: RegExp): Promise<TodoMatc
     return matches;
 }
 
-export async function scanWorkspace(regex: RegExp): Promise<TodoMatch[]> {
+export async function scanWorkspace(regex: RegExp, include: string, exclude: string): Promise<TodoMatch[]> {
     if (!vscode.workspace.workspaceFolders) {
         return [];
     }
-    const files = await vscode.workspace.findFiles(FILES_GLOB, EXCLUDE_GLOB);
+    const files = await vscode.workspace.findFiles(include, exclude);
     const results = await Promise.all(files.map(file => scanFile(file, regex)));
     return results.flat();
+}
+
+export function matchesFilter(match: TodoMatch, filter: MatchFilter): boolean {
+    if (filter.tags && !filter.tags.has(match.tag)) {
+        return false;
+    }
+    if (filter.text && !match.text.toLowerCase().includes(filter.text)) {
+        return false;
+    }
+    if (filter.pathPattern) {
+        const rel = vscode.workspace.asRelativePath(match.file, true).toLowerCase();
+        if (!rel.includes(filter.pathPattern)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+export function groupMatchesByFile(matches: TodoMatch[]): { uri: vscode.Uri; matches: TodoMatch[] }[] {
+    const byFile = new Map<string, { uri: vscode.Uri; matches: TodoMatch[] }>();
+
+    for (const match of matches) {
+        const key = match.file.toString();
+        const bucket = byFile.get(key);
+        if (bucket) {
+            bucket.matches.push(match);
+        } else {
+            byFile.set(key, { uri: match.file, matches: [match] });
+        }
+    }
+
+    return Array.from(byFile.values()).sort((a, b) => a.uri.fsPath.localeCompare(b.uri.fsPath));
 }
