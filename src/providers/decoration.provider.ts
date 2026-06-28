@@ -38,6 +38,12 @@ export class DecorationProvider implements vscode.Disposable {
         }
     }
 
+    clearDecorations(editor: vscode.TextEditor): void {
+        for (const decorationType of this.decorationTypes.values()) {
+            editor.setDecorations(decorationType, []);
+        }
+    }
+
     dispose(): void {
         this.disposeAll();
     }

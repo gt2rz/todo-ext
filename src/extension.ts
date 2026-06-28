@@ -7,7 +7,8 @@ import { getTodoFinderConfig } from './core/config';
 import { FixtureStatus, STATUS_LABELS } from './core/fixture-status';
 import { getRepositoryRemoteUrl } from './core/git-remote';
 import { buildNewIssueUrl, buildExistingIssueUrl } from './core/issue-url';
-import { TodoMatch, Priority } from './core/todo-scanner';
+import { buildTodoRegex, scanFile, TodoMatch, Priority } from './core/todo-scanner';
+import { normalizeTextFilter, resolveOptionStep, resolveTagsSelection } from './core/filter-wizard-logic';
 
 const FILTER_STATE_KEY = 'todoFinder.filterState';
 const FIXTURE_STATUSES_KEY = 'todoFinder.fixtureStatuses';
@@ -38,6 +39,10 @@ function restoreFilter(context: vscode.ExtensionContext): FilterState {
 	};
 }
 
+function todoFinderConfig() {
+	return vscode.workspace.getConfiguration('todoFinder');
+}
+
 export function activate(context: vscode.ExtensionContext) {
 
 	const todoProvider = new TodoProvider();
@@ -54,6 +59,10 @@ export function activate(context: vscode.ExtensionContext) {
 	const statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
 	statusBarItem.command = 'todoTree.focus';
 	function updateStatusBar(count: number) {
+		if (!todoFinderConfig().get<boolean>('statusBar.enabled', true)) {
+			statusBarItem.hide();
+			return;
+		}
 		if (count > 0) {
 			statusBarItem.text = `$(checklist) ${count}`;
 			statusBarItem.tooltip = `${count} fixtures pendientes — click para abrir`;
@@ -63,6 +72,17 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	}
 	updateStatusBar(todoProvider.getPendingCount());
+
+	function applyDecorations(editor: vscode.TextEditor | undefined) {
+		if (!editor) {
+			return;
+		}
+		if (todoFinderConfig().get<boolean>('decorations.enabled', true)) {
+			decorationProvider.updateDecorations(editor, getTodoFinderConfig());
+		} else {
+			decorationProvider.clearDecorations(editor);
+		}
+	}
 
 	// Persiste cada cambio de filtro/estado (después de restaurar, para no reescribir el mismo valor leído)
 	context.subscriptions.push(
@@ -85,9 +105,8 @@ export function activate(context: vscode.ExtensionContext) {
 	);
 
 	function refreshAll() {
-		const config = getTodoFinderConfig();
 		todoProvider.refresh();
-		decorationProvider.updateDecorations(vscode.window.activeTextEditor, config);
+		applyDecorations(vscode.window.activeTextEditor);
 		codeLensProvider.refresh();
 	}
 
@@ -105,27 +124,21 @@ export function activate(context: vscode.ExtensionContext) {
 			title: 'Filtrar por etiqueta (1/6) — Esc para no modificar',
 			placeHolder: 'Selecciona las etiquetas a mostrar (ninguna o todas = sin filtro)'
 		});
-		const tags = pickedTags === undefined
-			? current.tags
-			: (pickedTags.length === 0 || pickedTags.length === tagItems.length ? undefined : new Set(pickedTags.map(item => item.keyword)));
+		const tags = resolveTagsSelection(pickedTags?.map(item => item.keyword), tagItems.length, current.tags);
 
 		const text = await vscode.window.showInputBox({
 			title: 'Filtrar por texto (2/6) — Esc para no modificar',
 			placeHolder: 'Texto a buscar dentro del fixture (vacío = sin filtro)',
 			value: current.text ?? ''
 		});
-		const textFilter = text === undefined
-			? current.text
-			: (text.trim() ? text.trim().toLowerCase() : undefined);
+		const textFilter = text === undefined ? current.text : normalizeTextFilter(text, true);
 
 		const pathPattern = await vscode.window.showInputBox({
 			title: 'Filtrar por archivo/carpeta (3/6) — Esc para no modificar',
 			placeHolder: 'Subcadena de la ruta relativa a buscar (vacío = sin filtro)',
 			value: current.pathPattern ?? ''
 		});
-		const pathFilter = pathPattern === undefined
-			? current.pathPattern
-			: (pathPattern.trim() ? pathPattern.trim().toLowerCase() : undefined);
+		const pathFilter = pathPattern === undefined ? current.pathPattern : normalizeTextFilter(pathPattern, true);
 
 		const statusItems: { label: string; value: FixtureStatus | undefined }[] = [
 			{ label: 'Cualquier estado (sin filtro)', value: undefined },
@@ -135,16 +148,14 @@ export function activate(context: vscode.ExtensionContext) {
 			title: 'Filtrar por estado (4/6) — Esc para no modificar',
 			placeHolder: 'Issue / Resuelto / Wontfix / En progreso'
 		});
-		const status = pickedStatus === undefined ? current.status : pickedStatus.value;
+		const status = resolveOptionStep(pickedStatus, current.status);
 
 		const assignee = await vscode.window.showInputBox({
 			title: 'Filtrar por asignado (5/6) — Esc para no modificar',
 			placeHolder: 'Nombre de usuario, sin @ (vacío = sin filtro)',
 			value: current.assignee ?? ''
 		});
-		const assigneeFilter = assignee === undefined
-			? current.assignee
-			: (assignee.trim() ? assignee.trim() : undefined);
+		const assigneeFilter = assignee === undefined ? current.assignee : normalizeTextFilter(assignee);
 
 		const priorityItems: { label: string; value: Priority | undefined }[] = [
 			{ label: 'Cualquier prioridad (sin filtro)', value: undefined },
@@ -156,7 +167,7 @@ export function activate(context: vscode.ExtensionContext) {
 			title: 'Filtrar por prioridad (6/6) — Esc para no modificar',
 			placeHolder: 'Baja / Media / Alta'
 		});
-		const priority = pickedPriority === undefined ? current.priority : pickedPriority.value;
+		const priority = resolveOptionStep(pickedPriority, current.priority);
 
 		todoProvider.setFilter({ tags, text: textFilter, pathPattern: pathFilter, status, assignee: assigneeFilter, priority });
 	}
@@ -234,6 +245,32 @@ export function activate(context: vscode.ExtensionContext) {
 		await vscode.window.showTextDocument(doc);
 	}
 
+	async function goToFixture(direction: 1 | -1) {
+		const editor = vscode.window.activeTextEditor;
+		if (!editor) {
+			return;
+		}
+		const config = getTodoFinderConfig();
+		const matches = await scanFile(editor.document.uri, buildTodoRegex(config.tags));
+		if (matches.length === 0) {
+			vscode.window.showInformationMessage('No hay fixtures en este archivo.');
+			return;
+		}
+
+		const sorted = [...matches].sort((a, b) => a.line - b.line);
+		const cursorLine = editor.selection.active.line;
+		let target = direction === 1
+			? sorted.find(match => match.line > cursorLine)
+			: [...sorted].reverse().find(match => match.line < cursorLine);
+		if (!target) {
+			target = direction === 1 ? sorted[0] : sorted[sorted.length - 1];
+		}
+
+		const position = new vscode.Position(target.line, target.startCol);
+		editor.selection = new vscode.Selection(position, position);
+		editor.revealRange(new vscode.Range(position, position));
+	}
+
 	function relativeDirOf(fileUri: vscode.Uri): string {
 		const rel = vscode.workspace.asRelativePath(fileUri, true);
 		const dir = path.dirname(rel);
@@ -241,7 +278,7 @@ export function activate(context: vscode.ExtensionContext) {
 	}
 
 	decorationProvider.rebuildDecorationTypes(getTodoFinderConfig());
-	decorationProvider.updateDecorations(vscode.window.activeTextEditor, getTodoFinderConfig());
+	applyDecorations(vscode.window.activeTextEditor);
 
 	// Vigila cambios en disco que no pasan por onDidSaveTextDocument (git pull/checkout, otros procesos)
 	let fileWatcher = vscode.workspace.createFileSystemWatcher(getTodoFinderConfig().include);
@@ -288,6 +325,8 @@ export function activate(context: vscode.ExtensionContext) {
 	const openLinkedIssueCommand = vscode.commands.registerCommand('todoFinder.openLinkedIssue', openLinkedIssue);
 	const fixtureActionsCommand = vscode.commands.registerCommand('todoFinder.fixtureActions', showFixtureActions);
 	const exportMarkdownCommand = vscode.commands.registerCommand('todoFinder.exportMarkdown', exportMarkdown);
+	const goToNextCommand = vscode.commands.registerCommand('todoFinder.goToNext', () => goToFixture(1));
+	const goToPreviousCommand = vscode.commands.registerCommand('todoFinder.goToPrevious', () => goToFixture(-1));
 
 	context.subscriptions.push(
 		refreshCommand,
@@ -304,6 +343,8 @@ export function activate(context: vscode.ExtensionContext) {
 		openLinkedIssueCommand,
 		fixtureActionsCommand,
 		exportMarkdownCommand,
+		goToNextCommand,
+		goToPreviousCommand,
 		decorationProvider,
 		vscode.languages.registerCodeLensProvider({ scheme: 'file' }, codeLensProvider),
 		codeLensChangeSubscription,
@@ -312,7 +353,7 @@ export function activate(context: vscode.ExtensionContext) {
 		vscode.workspace.onDidSaveTextDocument(() => refreshAll()),
 		// Decorar el editor recién enfocado sin esperar a un guardado
 		vscode.window.onDidChangeActiveTextEditor(editor => {
-			decorationProvider.updateDecorations(editor, getTodoFinderConfig());
+			applyDecorations(editor);
 		}),
 		// Reconstruir decoraciones, watcher y refrescar todo cuando cambian los ajustes de todoFinder
 		vscode.workspace.onDidChangeConfiguration(event => {
@@ -323,6 +364,9 @@ export function activate(context: vscode.ExtensionContext) {
 			}
 		})
 	);
+
+	// Export mínimo para soporte de tests de integración (no es API pública de la extensión)
+	return { todoProvider, treeView };
 }
 
 // This method is called when your extension is deactivated

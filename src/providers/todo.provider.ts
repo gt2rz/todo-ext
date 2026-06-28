@@ -7,6 +7,8 @@ import { getBlameForLine } from '../core/git-blame';
 
 type TreeNode = FileItem | TodoItem;
 
+const PRIORITY_RANK: Record<string, number> = { alta: 0, media: 1, baja: 2 };
+
 export type FilterState = MatchFilter & { status?: FixtureStatus };
 
 export class TodoProvider implements vscode.TreeDataProvider<TreeNode> {
@@ -126,7 +128,8 @@ export class TodoProvider implements vscode.TreeDataProvider<TreeNode> {
     }
 
     async resolveTreeItem(item: vscode.TreeItem, element: TreeNode): Promise<vscode.TreeItem> {
-        if (element.kind === 'todo') {
+        const blameEnabled = vscode.workspace.getConfiguration('todoFinder').get<boolean>('gitBlame.enabled', true);
+        if (element.kind === 'todo' && blameEnabled) {
             const blame = await getBlameForLine(element.match.file, element.match.line);
             if (blame) {
                 item.tooltip = `${item.tooltip}\n${blame.author} · ${blame.date}`;
@@ -145,10 +148,22 @@ export class TodoProvider implements vscode.TreeDataProvider<TreeNode> {
         }
 
         if (element.kind === 'file') {
-            return element.matches.map(match => new TodoItem(match, this.getStatus(match)));
+            return this.sortMatches(element.matches).map(match => new TodoItem(match, this.getStatus(match)));
         }
 
         return [];
+    }
+
+    private sortMatches(matches: TodoMatch[]): TodoMatch[] {
+        const sortOrder = vscode.workspace.getConfiguration('todoFinder').get<string>('treeView.sortOrder', 'path');
+        if (sortOrder !== 'priority') {
+            return matches;
+        }
+        return [...matches].sort((a, b) => {
+            const rankA = a.priority ? PRIORITY_RANK[a.priority] : 3;
+            const rankB = b.priority ? PRIORITY_RANK[b.priority] : 3;
+            return rankA - rankB;
+        });
     }
 
     private async getRawMatches(): Promise<TodoMatch[]> {

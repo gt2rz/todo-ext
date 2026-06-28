@@ -1,8 +1,28 @@
 {
   "name": "todo-ext",
-  "displayName": "todo-ext",
-  "description": "",
-  "version": "0.0.1",
+  "displayName": "TODO Finder",
+  "description": "Encuentra, organiza y gestiona TODOs/FIXMEs en tu proyecto: filtros, estados locales, integración con GitHub/GitLab, CodeLens y más.",
+  "version": "0.1.0",
+  "publisher": "TU_PUBLISHER_ID_AQUI",
+  "license": "MIT",
+  "keywords": [
+    "todo",
+    "fixme",
+    "tasks",
+    "comments",
+    "github",
+    "gitlab",
+    "issues",
+    "markdown"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/TU_USUARIO/todo-ext"
+  },
+  "bugs": {
+    "url": "https://github.com/TU_USUARIO/todo-ext/issues"
+  },
+  "homepage": "https://github.com/TU_USUARIO/todo-ext#readme",
   "engines": {
     "vscode": "^1.125.0"
   },
@@ -16,10 +36,6 @@
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
-      {
-        "command": "todo-ext.helloWorld",
-        "title": "Hello World"
-      },
       {
         "command": "todoFinder.refresh",
         "title": "Refrescar TODOs",
@@ -75,6 +91,14 @@
         "command": "todoFinder.exportMarkdown",
         "title": "Exportar a Markdown",
         "icon": "$(markdown)"
+      },
+      {
+        "command": "todoFinder.goToNext",
+        "title": "TODO Finder: Ir al siguiente fixture"
+      },
+      {
+        "command": "todoFinder.goToPrevious",
+        "title": "TODO Finder: Ir al fixture anterior"
       }
     ],
     "menus": {
@@ -210,6 +234,31 @@
           "type": "boolean",
           "default": true,
           "description": "Muestra un CodeLens de acciones rápidas sobre cada TODO/FIXME detectado."
+        },
+        "todoFinder.decorations.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Resalta los TODOs/FIXMEs directamente en el editor."
+        },
+        "todoFinder.gitBlame.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Muestra autor y fecha (vía git blame) en el tooltip de cada fixture."
+        },
+        "todoFinder.statusBar.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Muestra la cantidad de fixtures pendientes en la barra de estado."
+        },
+        "todoFinder.treeView.sortOrder": {
+          "type": "string",
+          "enum": ["path", "priority"],
+          "enumDescriptions": [
+            "Ordena los fixtures de cada archivo por línea (orden de aparición).",
+            "Ordena los fixtures de cada archivo por prioridad (alta → media → baja → sin prioridad)."
+          ],
+          "default": "path",
+          "description": "Orden de los fixtures dentro de cada archivo en el árbol."
         }
       }
     }

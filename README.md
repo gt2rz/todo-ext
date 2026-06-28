@@ -90,6 +90,7 @@ const x = 1; // esta línea ya no forma parte del fixture
 | `todoFinder.createIssue` | Crea un nuevo issue en GitHub/GitLab a partir del fixture. |
 | `todoFinder.openLinkedIssue` | Abre el issue referenciado con `#123` en el comentario. |
 | `todoFinder.exportMarkdown` | Exporta el árbol (filtrado) a un documento Markdown. |
+| `todoFinder.goToNext` / `goToPrevious` | Mueve el cursor al fixture siguiente/anterior en el archivo activo (con wrap-around). Sin keybinding por defecto — asignale uno propio desde "Keyboard Shortcuts" si lo usás seguido. |
 
 Todos disponibles desde el menú contextual del árbol y/o el CodeLens; los de filtro y refresco también tienen botón en la barra del panel.
 
@@ -102,6 +103,10 @@ Todos disponibles desde el menú contextual del árbol y/o el CodeLens; los de f
 | `todoFinder.include` | `string` | `**/*.{ts,js,py,md,txt,php}` | Glob de archivos a escanear. |
 | `todoFinder.exclude` | `string` | `**/{node_modules,vendor}/**` | Glob de archivos/carpetas a excluir. |
 | `todoFinder.codeLens.enabled` | `boolean` | `true` | Muestra el CodeLens de acciones rápidas sobre cada fixture. |
+| `todoFinder.decorations.enabled` | `boolean` | `true` | Resalta los TODOs/FIXMEs directamente en el editor. |
+| `todoFinder.gitBlame.enabled` | `boolean` | `true` | Muestra autor y fecha (vía git blame) en el tooltip de cada fixture. |
+| `todoFinder.statusBar.enabled` | `boolean` | `true` | Muestra la cantidad de fixtures pendientes en la barra de estado. |
+| `todoFinder.treeView.sortOrder` | `string` | `"path"` | Orden de los fixtures dentro de cada archivo: `"path"` (por línea) o `"priority"` (alta → media → baja → sin prioridad). |
 
 Ejemplo de etiqueta personalizada:
 
