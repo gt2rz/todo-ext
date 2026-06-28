@@ -66,6 +66,15 @@
       {
         "command": "todoFinder.createIssue",
         "title": "Crear issue en GitHub/GitLab"
+      },
+      {
+        "command": "todoFinder.openLinkedIssue",
+        "title": "Abrir issue vinculado"
+      },
+      {
+        "command": "todoFinder.exportMarkdown",
+        "title": "Exportar a Markdown",
+        "icon": "$(markdown)"
       }
     ],
     "menus": {
@@ -83,6 +92,11 @@
         {
           "command": "todoFinder.clearFilter",
           "when": "view == todoTree && todoFinder.filterActive",
+          "group": "navigation"
+        },
+        {
+          "command": "todoFinder.exportMarkdown",
+          "when": "view == todoTree",
           "group": "navigation"
         }
       ],
@@ -124,6 +138,11 @@
         },
         {
           "command": "todoFinder.createIssue",
+          "when": "view == todoTree && viewItem == todoFixture",
+          "group": "3_issue"
+        },
+        {
+          "command": "todoFinder.openLinkedIssue",
           "when": "view == todoTree && viewItem == todoFixture",
           "group": "3_issue"
         }
@@ -186,6 +205,11 @@
           "type": "string",
           "default": "**/{node_modules,vendor}/**",
           "description": "Patrón glob de archivos/carpetas a excluir del escaneo."
+        },
+        "todoFinder.codeLens.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Muestra un CodeLens de acciones rápidas sobre cada TODO/FIXME detectado."
         }
       }
     }

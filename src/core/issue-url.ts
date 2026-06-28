@@ -39,3 +39,27 @@ export function buildNewIssueUrl(remoteUrl: string, title: string, body: string)
 
     return { error: `No se reconoce el proveedor del remote (${host}).` };
 }
+
+export function buildExistingIssueUrl(remoteUrl: string, issueNumber: number): { url: string } | { error: string } {
+    const parsed = parseGitRemote(remoteUrl);
+    if (!parsed) {
+        return { error: 'No se pudo interpretar la URL del remote.' };
+    }
+
+    const { host, path } = parsed;
+
+    if (host === 'github.com') {
+        const segments = path.split('/');
+        if (segments.length < 2) {
+            return { error: 'No se pudo determinar owner/repo de GitHub.' };
+        }
+        const [owner, repo] = segments.slice(-2);
+        return { url: `https://${host}/${owner}/${repo}/issues/${issueNumber}` };
+    }
+
+    if (host === 'gitlab.com' || host.startsWith('gitlab.')) {
+        return { url: `https://${host}/${path}/-/issues/${issueNumber}` };
+    }
+
+    return { error: `No se reconoce el proveedor del remote (${host}).` };
+}

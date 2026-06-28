@@ -3,6 +3,7 @@ import * as path from 'path';
 import { buildTodoRegex, scanWorkspace, matchesFilter, groupMatchesByFile, TodoMatch, MatchFilter } from '../core/todo-scanner';
 import { getTodoFinderConfig } from '../core/config';
 import { FixtureStatus, fixtureKey, STATUS_ICONS, STATUS_LABELS } from '../core/fixture-status';
+import { getBlameForLine } from '../core/git-blame';
 
 type TreeNode = FileItem | TodoItem;
 
@@ -18,10 +19,14 @@ export class TodoProvider implements vscode.TreeDataProvider<TreeNode> {
     private _onDidChangeStatuses: vscode.EventEmitter<void> = new vscode.EventEmitter<void>();
     readonly onDidChangeStatuses: vscode.Event<void> = this._onDidChangeStatuses.event;
 
+    private _onDidChangeBadge: vscode.EventEmitter<number> = new vscode.EventEmitter<number>();
+    readonly onDidChangeBadge: vscode.Event<number> = this._onDidChangeBadge.event;
+
     private filter: FilterState = {};
     private rawMatches: TodoMatch[] | null = null;
     private treeView: vscode.TreeView<TreeNode> | undefined;
     private statuses: Map<string, FixtureStatus> = new Map();
+    private pendingCount = 0;
 
     setTreeView(view: vscode.TreeView<TreeNode>): void {
         this.treeView = view;
@@ -37,7 +42,8 @@ export class TodoProvider implements vscode.TreeDataProvider<TreeNode> {
     }
 
     hasActiveFilter(): boolean {
-        return !!(this.filter.tags || this.filter.text || this.filter.pathPattern || this.filter.status);
+        return !!(this.filter.tags || this.filter.text || this.filter.pathPattern || this.filter.status
+            || this.filter.assignee || this.filter.priority);
     }
 
     setFilter(next: FilterState): void {
@@ -71,6 +77,7 @@ export class TodoProvider implements vscode.TreeDataProvider<TreeNode> {
             this.statuses.delete(key);
         }
         this._onDidChangeStatuses.fire();
+        this.updateBadge();
         this._onDidChangeTreeData.fire();
     }
 
@@ -80,6 +87,10 @@ export class TodoProvider implements vscode.TreeDataProvider<TreeNode> {
 
     getStatusEntries(): [string, FixtureStatus][] {
         return Array.from(this.statuses.entries());
+    }
+
+    getPendingCount(): number {
+        return this.pendingCount;
     }
 
     private pruneStatuses(matches: TodoMatch[]): void {
@@ -96,8 +107,32 @@ export class TodoProvider implements vscode.TreeDataProvider<TreeNode> {
         }
     }
 
+    private updateBadge(): void {
+        this.pendingCount = (this.rawMatches ?? []).filter(match => {
+            const status = this.getStatus(match);
+            return status !== 'done' && status !== 'wontfix';
+        }).length;
+
+        if (this.treeView) {
+            this.treeView.badge = this.pendingCount > 0
+                ? { value: this.pendingCount, tooltip: `${this.pendingCount} fixtures pendientes` }
+                : undefined;
+        }
+        this._onDidChangeBadge.fire(this.pendingCount);
+    }
+
     getTreeItem(element: TreeNode): vscode.TreeItem {
         return element;
+    }
+
+    async resolveTreeItem(item: vscode.TreeItem, element: TreeNode): Promise<vscode.TreeItem> {
+        if (element.kind === 'todo') {
+            const blame = await getBlameForLine(element.match.file, element.match.line);
+            if (blame) {
+                item.tooltip = `${item.tooltip}\n${blame.author} · ${blame.date}`;
+            }
+        }
+        return item;
     }
 
     async getChildren(element?: TreeNode): Promise<TreeNode[]> {
@@ -110,10 +145,7 @@ export class TodoProvider implements vscode.TreeDataProvider<TreeNode> {
         }
 
         if (element.kind === 'file') {
-            return element.matches.map(match => {
-                const range = new vscode.Range(match.line, match.startCol, match.line, match.startCol + match.text.length);
-                return new TodoItem(match, range, this.getStatus(match));
-            });
+            return element.matches.map(match => new TodoItem(match, this.getStatus(match)));
         }
 
         return [];
@@ -125,6 +157,7 @@ export class TodoProvider implements vscode.TreeDataProvider<TreeNode> {
             const regex = buildTodoRegex(config.tags);
             this.rawMatches = await scanWorkspace(regex, config.include, config.exclude);
             this.pruneStatuses(this.rawMatches);
+            this.updateBadge();
         }
         return this.rawMatches;
     }
@@ -173,16 +206,24 @@ export class FileItem extends vscode.TreeItem {
 
 export class TodoItem extends vscode.TreeItem {
     readonly kind = 'todo' as const;
+    public readonly range: vscode.Range;
 
     constructor(
         public readonly match: TodoMatch,
-        public readonly range: vscode.Range,
         status?: FixtureStatus
     ) {
         super(`${match.tag}: ${match.text.trim()}`, vscode.TreeItemCollapsibleState.None);
 
-        this.tooltip = `${match.file.fsPath}:${range.start.line + 1}`;
-        this.description = path.basename(match.file.fsPath);
+        this.range = new vscode.Range(match.line, match.startCol, match.line, match.startCol + match.tag.length);
+
+        const metaParts = [];
+        if (match.assignee) { metaParts.push(`@${match.assignee}`); }
+        if (match.priority) { metaParts.push(match.priority); }
+        this.description = metaParts.length
+            ? `${path.basename(match.file.fsPath)} · ${metaParts.join(' · ')}`
+            : path.basename(match.file.fsPath);
+
+        this.tooltip = `${match.file.fsPath}:${match.line + 1}`;
         this.contextValue = 'todoFixture';
 
         if (status) {
@@ -195,7 +236,7 @@ export class TodoItem extends vscode.TreeItem {
             title: "Abrir Archivo",
             arguments: [
                 match.file,
-                { selection: range }
+                { selection: this.range }
             ]
         };
     }

@@ -30,7 +30,10 @@ export class DecorationProvider implements vscode.Disposable {
         for (const [keyword, decorationType] of this.decorationTypes) {
             const ranges = matches
                 .filter(match => match.tag === keyword)
-                .map(match => new vscode.Range(match.line, match.startCol, match.line, editor.document.lineAt(match.line).text.length));
+                .map(match => {
+                    const endLine = Math.min(match.endLine, editor.document.lineCount - 1);
+                    return new vscode.Range(match.line, match.startCol, endLine, editor.document.lineAt(endLine).text.length);
+                });
             editor.setDecorations(decorationType, ranges);
         }
     }

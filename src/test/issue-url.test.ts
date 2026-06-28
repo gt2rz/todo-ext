@@ -1,5 +1,5 @@
 import * as assert from 'assert';
-import { buildNewIssueUrl, parseGitRemote } from '../core/issue-url';
+import { buildNewIssueUrl, buildExistingIssueUrl, parseGitRemote } from '../core/issue-url';
 
 suite('issue-url', () => {
 
@@ -63,6 +63,23 @@ suite('issue-url', () => {
 
 		test('remote irreconocible devuelve error', () => {
 			const result = buildNewIssueUrl('no-es-una-url', 'TODO: x', 'y');
+			assert.ok('error' in result);
+		});
+	});
+
+	suite('buildExistingIssueUrl', () => {
+		test('GitHub: apunta al issue existente por número', () => {
+			const result = buildExistingIssueUrl('https://github.com/owner/repo.git', 123);
+			assert.deepStrictEqual(result, { url: 'https://github.com/owner/repo/issues/123' });
+		});
+
+		test('GitLab: preserva el path anidado y apunta al issue existente', () => {
+			const result = buildExistingIssueUrl('https://gitlab.com/grupo/subgrupo/repo.git', 7);
+			assert.deepStrictEqual(result, { url: 'https://gitlab.com/grupo/subgrupo/repo/-/issues/7' });
+		});
+
+		test('host desconocido devuelve error', () => {
+			const result = buildExistingIssueUrl('https://bitbucket.org/owner/repo.git', 1);
 			assert.ok('error' in result);
 		});
 	});

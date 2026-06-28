@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
+import * as path from 'path';
 
 export interface TodoTag {
     keyword: string;
@@ -7,22 +8,43 @@ export interface TodoTag {
     icon?: string;
 }
 
+export type Priority = 'baja' | 'media' | 'alta';
+
 export interface TodoMatch {
     tag: string;
     text: string;
     line: number;
+    endLine: number;
     startCol: number;
     file: vscode.Uri;
+    assignee?: string;
+    priority?: Priority;
+    issueNumber?: number;
 }
 
 export interface MatchFilter {
     tags?: Set<string>;
     text?: string;
     pathPattern?: string;
+    assignee?: string;
+    priority?: Priority;
 }
 
 export const DEFAULT_FILES_GLOB = '**/*.{ts,js,py,md,txt,php}';
 export const DEFAULT_EXCLUDE_GLOB = '**/{node_modules,vendor}/**';
+
+const LINE_COMMENT_BY_EXT: Record<string, string> = {
+    ts: '//',
+    js: '//',
+    php: '//',
+    py: '#',
+};
+
+const PRIORITY_ALIASES: Record<string, Priority> = {
+    baja: 'baja', low: 'baja',
+    media: 'media', medium: 'media', med: 'media',
+    alta: 'alta', high: 'alta',
+};
 
 function escapeRegExp(value: string): string {
     return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -30,7 +52,44 @@ function escapeRegExp(value: string): string {
 
 export function buildTodoRegex(tags: TodoTag[]): RegExp {
     const keywords = tags.map(tag => escapeRegExp(tag.keyword));
-    return new RegExp(`\\b(${keywords.join('|')}):(.*)`, 'i');
+    return new RegExp(`\\b(${keywords.join('|')})(?:\\(([^)]*)\\))?:(.*)`, 'i');
+}
+
+function commentPrefixFor(uri: vscode.Uri): string | undefined {
+    const ext = path.extname(uri.fsPath).slice(1).toLowerCase();
+    return LINE_COMMENT_BY_EXT[ext];
+}
+
+interface Metadata {
+    assignee?: string;
+    priority?: Priority;
+    issueNumber?: number;
+}
+
+function parseMetadata(raw: string | undefined): Metadata {
+    const result: Metadata = {};
+    if (!raw) {
+        return result;
+    }
+    for (const rawToken of raw.split(',')) {
+        const token = rawToken.trim();
+        if (token.startsWith('@') && token.length > 1) {
+            result.assignee = token.slice(1);
+            continue;
+        }
+        const issueMatch = token.match(/^#(\d+)$/);
+        if (issueMatch) {
+            result.issueNumber = Number(issueMatch[1]);
+            continue;
+        }
+        const priority = PRIORITY_ALIASES[token.toLowerCase()];
+        if (priority) {
+            result.priority = priority;
+        }
+        // Tokens no reconocidos se ignoran en silencio: esto corre por cada línea de cada
+        // archivo en cada scan, no vale la pena advertir por consola.
+    }
+    return result;
 }
 
 export async function scanFile(uri: vscode.Uri, regex: RegExp): Promise<TodoMatch[]> {
@@ -42,19 +101,48 @@ export async function scanFile(uri: vscode.Uri, regex: RegExp): Promise<TodoMatc
         return matches;
     }
 
-    const lines = content.split('\n');
-    lines.forEach((line, index) => {
-        const match = regex.exec(line);
-        if (match) {
-            matches.push({
-                tag: match[1].toUpperCase(),
-                text: match[2],
-                line: index,
-                startCol: match.index,
-                file: uri,
-            });
+    const lines = content.replace(/\r\n/g, '\n').split('\n');
+    const prefix = commentPrefixFor(uri);
+
+    for (let index = 0; index < lines.length; index++) {
+        const match = regex.exec(lines[index]);
+        if (!match) {
+            continue;
         }
-    });
+
+        const metaRaw = match[2];
+        const meta = parseMetadata(metaRaw);
+        const recognized = meta.assignee !== undefined || meta.priority !== undefined || meta.issueNumber !== undefined;
+        let text = (metaRaw !== undefined && !recognized) ? `(${metaRaw}):${match[3]}` : match[3];
+
+        let endLine = index;
+        if (prefix) {
+            let next = index + 1;
+            while (next < lines.length) {
+                const trimmed = lines[next].trim();
+                if (!trimmed.startsWith(prefix)) {
+                    break;
+                }
+                const continuation = trimmed.slice(prefix.length).trim();
+                if (continuation === '' || regex.test(lines[next])) {
+                    break;
+                }
+                text += ' ' + continuation;
+                endLine = next;
+                next++;
+            }
+        }
+
+        matches.push({
+            tag: match[1].toUpperCase(),
+            text,
+            line: index,
+            endLine,
+            startCol: match.index,
+            file: uri,
+            ...meta,
+        });
+    }
     return matches;
 }
 
@@ -79,6 +167,12 @@ export function matchesFilter(match: TodoMatch, filter: MatchFilter): boolean {
         if (!rel.includes(filter.pathPattern)) {
             return false;
         }
+    }
+    if (filter.assignee && (match.assignee ?? '').toLowerCase() !== filter.assignee.toLowerCase()) {
+        return false;
+    }
+    if (filter.priority && match.priority !== filter.priority) {
+        return false;
     }
     return true;
 }
