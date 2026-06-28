@@ -12,11 +12,8 @@ export class DecorationProvider implements vscode.Disposable {
             this.decorationTypes.set(tag.keyword, vscode.window.createTextEditorDecorationType({
                 backgroundColor: `${color}33`,
                 border: `1px solid ${color}`,
-                before: {
-                    contentText: tag.icon ?? '●',
-                    color,
-                    margin: '0 4px 0 0',
-                },
+                color,
+                fontWeight: 'bold',
                 overviewRulerColor: color,
                 overviewRulerLane: vscode.OverviewRulerLane.Right,
             }));
