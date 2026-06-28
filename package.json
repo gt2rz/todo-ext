@@ -1,0 +1,120 @@
+{
+  "name": "todo-ext",
+  "displayName": "todo-ext",
+  "description": "",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.125.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "todo-ext.helloWorld",
+        "title": "Hello World"
+      },
+      {
+        "command": "todoFinder.refresh",
+        "title": "Refrescar TODOs",
+        "icon": "$(refresh)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "todoFinder.refresh",
+          "when": "view == todoTree",
+          "group": "navigation"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "todo-explorer",
+          "title": "TODO Finder",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "todo-explorer": [
+        {
+          "id": "todoTree",
+          "name": "Tareas Pendientes"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "TODO Finder",
+      "properties": {
+        "todoFinder.includeDefaultTags": {
+          "type": "boolean",
+          "default": true,
+          "description": "Incluye las etiquetas por defecto (TODO, FIXME, DEBUG) además de las personalizadas."
+        },
+        "todoFinder.customTags": {
+          "type": "array",
+          "default": [],
+          "description": "Etiquetas personalizadas a detectar, ej. REVIEW, IDEA, BUG.",
+          "items": {
+            "type": "object",
+            "required": ["keyword"],
+            "properties": {
+              "keyword": {
+                "type": "string",
+                "description": "Palabra clave a detectar, ej. REVIEW"
+              },
+              "color": {
+                "type": "string",
+                "description": "Color CSS para resaltar la etiqueta, ej. #FFA500"
+              },
+              "icon": {
+                "type": "string",
+                "description": "Emoji o carácter opcional a mostrar antes de la etiqueta en el editor, ej. ⚠️"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "pnpm run package",
+    "compile": "pnpm run check-types && pnpm run lint && node esbuild.js",
+    "watch": "npm-run-all -p watch:*",
+    "watch:esbuild": "node esbuild.js --watch",
+    "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
+    "package": "pnpm run check-types && pnpm run lint && node esbuild.js --production",
+    "compile-tests": "tsc -p . --outDir out",
+    "watch-tests": "tsc -p . -w --outDir out",
+    "pretest": "pnpm run compile-tests && pnpm run compile && pnpm run lint",
+    "check-types": "tsc --noEmit",
+    "lint": "eslint src",
+    "test": "vscode-test",
+    "install:local": "bash scripts/install-local.sh"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "24.x",
+    "@types/vscode": "^1.125.0",
+    "@vscode/test-cli": "^0.0.15",
+    "@vscode/test-electron": "^3.0.0",
+    "esbuild": "^0.28.1",
+    "eslint": "^10.5.0",
+    "npm-run-all": "^4.1.5",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.61.1"
+  },
+  "overrides": {
+    "diff": "^8.0.4",
+    "serialize-javascript": "^7.0.6"
+  },
+  "dependencies": {
+    "todo-ext": "link:"
+  }
+}
